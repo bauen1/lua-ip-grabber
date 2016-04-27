@@ -41,7 +41,6 @@ function launchServer (port)
         end
 
         client:send ("HTTP/1.1 302\r\nlocation: " .. target .. "\r\n")
-        --client:send ("HTTP/1.1 200\r\ncontent-length: 5\r\ncontent-type: text/plain\r\ncontent-encoding: UTF-8\r\n\r\nhello")
       end
 
       client:close ()
