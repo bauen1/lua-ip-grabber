@@ -35,12 +35,16 @@ function launchServer (port)
 
         local target = ""
 
-        if url:sub (1,9) == "/?target=" then
-          target = url:sub (10, -1);
-        else
-        end
+        if url then
+          if url:sub (1,9) == "/?target=" then
+            target = url:sub (10, -1);
+          else
+          end
 
-        client:send ("HTTP/1.1 302\r\nlocation: " .. target .. "\r\n")
+          client:send ("HTTP/1.1 302\r\nlocation: " .. target .. "\r\n")
+        else
+          client:send ("HTTP/1.1 200\r\n\r\nHello there Stranger...")
+        end
       end
 
       client:close ()
