@@ -1,80 +1,100 @@
--- Dependencys (all luasocket)
+#!/usr/bin/env lua
+--[[
+
+The MIT License (MIT)
+
+Copyright (c) 2016-2017 bauen1
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+]]--
+-- Dependencies: luasocket
 local socket = require "socket"
 local dns = socket.dns
---local http = require "socke.thttp"
 local ltn12 = require "ltn12"
 
-function generateURL (url)
-  -- TODO: Implement
-  return url
+function printf(...)
+  return print(string.format(...))
 end
 
-function launchServer (port)
-  local server = socket.bind ("*", port or 8080)
-  server:settimeout (0.1)
+function handle_client(c)
+  c:settimeout(0.5)
+  local peername = c:getpeername()
+  printf("Connection from '%s' / '%s'", peername, (dns.tohostname (peername) or "nil"))
+  local l, e = c:receive()
+  c:send("HTTP/1.0 ")
+  if l then
+    -- Get target location:
+    local method, url, ver = l:match("^([^%s]*) (.*) HTTP/(%d.%d)$") -- Get target redirection url
+
+    local target = ""
+
+    if url then
+      if url:sub(1,9) == "/?target=" then
+        target = url:sub (10, -1);
+      else
+        target = "https://google.com/"
+      end
+
+      c:send("302\r\nlocation: " .. target .. "\r\n") -- Redirect
+    else
+      c:send("200 OK\r\n\r\nHello there Stranger ...") -- Show a basic page
+    end
+  end
+  c:close()
+end
+
+function launchServer (address, port)
+  local server = assert(socket.bind(address, port))
+  printf("Listening on %s:%s", address, port)
+  -- Normally this should open a listening socket (server) on every ipv6 address available on 'port'
+
+  server:settimeout(5) -- So we can Ctrl+C and still cleanup the socket
 
   while true do
-    local client, err = server:accept ()
+    local client, err = server:accept() -- Accept a new client
 
     if err then
       if err == "timeout" then
-        socket.sleep (0.1)
+        socket.sleep(0.1)
       else
-        print (err)
+        print(err)
         return;
       end
     else
-      local line, err = client:receive ()
-
-      if line then
-        local peername = client:getpeername ()
-        print ("'" .. line .. "' from '" .. peername .. "' / '" .. (dns.tohostname (peername) or "nil") .. "'")
-
-        -- Get target location:
-        local method, url, ver = line:match ("^([^%s]*) (.*) HTTP/(%d.%d)$")
-
-        local target = ""
-
-        if url then
-          if url:sub (1,9) == "/?target=" then
-            target = url:sub (10, -1);
-          else
-          end
-
-          client:send ("HTTP/1.1 302\r\nlocation: " .. target .. "\r\n")
-        else
-          client:send ("HTTP/1.1 200\r\n\r\nHello there Stranger...")
-        end
+      local success, err = pcall(handle_client, client)
+      if not success then
+        printf("error in 'handle_client': %s", err)
       end
-
-      client:close ()
     end
   end
-
-  return ""
 end
 
-local args = table.pack (...)
-
-if args.n >= 1 then
-  if tonumber (args[1], 10) then
-    -- Launch the server
-    local port = tonumber (args[1], 10)
-    if (port < 1) or (port > 65535) then
-      io.write ("the port must be between 1 and 65535")
-      return 0;
-    end
-
-    return launchServer (port)
-  else
-    -- Generate url
-    print (generateURL (args[1]))
-  end
+local port = tonumber(arg[2])
+if port and (port >= 0) and (port <= 65535) then
+  launchServer(arg[1], port)
 else
-  -- Print manual
-  io.write ([[
-Usage: lua init.lua <port/url>
-port: a valid number between 1 and 65535, will launch the server
-url: a http url, will generate a url that on visit will print the visitors ip & hostname
-]])
+  printf([[
+Usage: %s <ip_addr> <port>
+  ip_addr: '::' to bind to all ipv6 (and ipv4) addresses
+           '*' to bind to all ipv4 addresses
+  port:    0-65535
+]], arg[0])
+  return
 end
